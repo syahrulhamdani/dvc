@@ -17,11 +17,13 @@ logger = logging.getLogger(__name__)
 
 @locked
 @scm_context
-def add(repo, target, recursive=False, no_commit=False, fname=None):
+def add(repo, target, recursive=False, no_commit=False, fname=None, pbar=None):
     if recursive and fname:
         raise RecursiveAddingWhileUsingFilename()
 
     targets = _find_all_targets(repo, target, recursive)
+    if pbar is not None:
+        pbar.total += len(targets) - 1
 
     if os.path.isdir(target) and len(targets) > LARGE_DIR_SIZE:
         logger.warning(
@@ -37,7 +39,12 @@ def add(repo, target, recursive=False, no_commit=False, fname=None):
         )
 
     with repo.state:
-        stages = _create_stages(repo, targets, fname)
+        stages = _create_stages(
+            repo,
+            targets,
+            fname,
+            callback=pbar.update_desc if pbar is not None else None
+        )
 
         repo.check_modified_graph(stages)
 
@@ -65,7 +72,7 @@ def _find_all_targets(repo, target, recursive):
     return [target]
 
 
-def _create_stages(repo, targets, fname):
+def _create_stages(repo, targets, fname, callback=None):
     stages = []
 
     for out in targets:
@@ -75,5 +82,8 @@ def _create_stages(repo, targets, fname):
             continue
 
         stages.append(stage)
+
+        if callback is not None:
+            callback(out)
 
     return stages
